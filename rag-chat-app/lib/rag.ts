@@ -70,8 +70,19 @@ export async function queryRAG(
     );
 
     // Query Pinecone for similar chunks
-    const index = await getPineconeIndex();
-    const results = await queryVectors(index, queryEmbedding, topK);
+    let index;
+    let results;
+    try {
+      index = await getPineconeIndex();
+      results = await queryVectors(index, queryEmbedding, topK);
+    } catch (pineconeError) {
+      console.error('Pinecone error in queryRAG:', pineconeError);
+      // Re-throw with context
+      if (pineconeError instanceof Error) {
+        throw new Error(`Pinecone connection failed: ${pineconeError.message}`);
+      }
+      throw new Error('Failed to query Pinecone vector database');
+    }
 
     // Extract context from retrieved chunks
     const context = results
@@ -86,9 +97,22 @@ export async function queryRAG(
       .map((result) => result.metadata?.source as string | undefined)
       .filter((source): source is string => !!source);
 
+    // Check if we have any context
+    if (!context || context.trim().length === 0) {
+      return {
+        response: 'I don\'t have any documents loaded yet. Please upload some documents first so I can answer your questions based on their content.',
+        sources: [],
+      };
+    }
+
     // Generate response using Gemini
     // Use environment variable or fallback to gemini-pro
     const modelName = process.env.GEMINI_MODEL || 'gemini-pro';
+    
+    if (!process.env.GEMINI_API_KEY) {
+      throw new Error('GEMINI_API_KEY is not set in environment variables');
+    }
+
     const model = genAI.getGenerativeModel({ model: modelName });
 
     const prompt = `You are a helpful assistant. Answer the user's question based on the following context. If the context doesn't contain enough information, say so.
@@ -100,8 +124,17 @@ Question: ${query}
 
 Answer:`;
 
-    const result = await model.generateContent(prompt);
-    const response = result.response.text();
+    let response: string;
+    try {
+      const result = await model.generateContent(prompt);
+      response = result.response.text();
+    } catch (geminiError) {
+      console.error('Gemini API error:', geminiError);
+      if (geminiError instanceof Error) {
+        throw new Error(`Gemini API error: ${geminiError.message}`);
+      }
+      throw new Error('Failed to generate response from Gemini');
+    }
 
     return {
       response,

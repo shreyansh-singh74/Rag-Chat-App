@@ -1,32 +1,46 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { MessageBubble } from '@/components/chat/MessageBubble';
+import { ChatInput } from '@/components/chat/ChatInput';
+import { DocumentList } from '@/components/documents/DocumentList';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Separator } from '@/components/ui/separator';
+import { Loader2 } from 'lucide-react';
 
 interface Message {
   role: 'user' | 'assistant';
   content: string;
-  sources?: string[];
 }
 
 export default function Home() {
   const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [uploading, setUploading] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const handleSend = async () => {
-    if (!input.trim() || loading) return;
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
 
-    const userMessage: Message = { role: 'user', content: input };
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+
+  const handleSend = async (message: string) => {
+    if (!message.trim() || loading) return;
+
+    const userMessage: Message = {
+      role: 'user',
+      content: message,
+    };
     setMessages((prev) => [...prev, userMessage]);
-    setInput('');
     setLoading(true);
 
     try {
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: input }),
+        body: JSON.stringify({ message }),
       });
 
       const data = await response.json();
@@ -37,7 +51,6 @@ export default function Home() {
           {
             role: 'assistant',
             content: data.message,
-            sources: data.sources,
           },
         ]);
       } else {
@@ -62,118 +75,65 @@ export default function Home() {
     }
   };
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setUploading(true);
-
-    try {
-      const formData = new FormData();
-      formData.append('file', file);
-
-      const response = await fetch('/api/upload', {
-        method: 'POST',
-        body: formData,
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        alert('Document uploaded successfully!');
-      } else {
-        alert(`Error: ${data.error || 'Failed to upload file'}`);
-      }
-    } catch (error) {
-      alert('Error: Failed to upload file');
-    } finally {
-      setUploading(false);
-      e.target.value = ''; // Reset file input
-    }
-  };
-
   return (
-    <div className="flex flex-col h-screen bg-gray-50">
+    <div className="flex h-screen bg-background flex-col">
       {/* Header */}
-      <header className="bg-white border-b border-gray-200 px-6 py-4">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-gray-900">RAG Chat App</h1>
-          <label className="cursor-pointer bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors">
-            {uploading ? 'Uploading...' : 'Upload Document'}
-            <input
-              type="file"
-              accept=".pdf,.txt"
-              onChange={handleFileUpload}
-              className="hidden"
-              disabled={uploading}
-            />
-          </label>
+      <header className="border-b border-border bg-card px-6 py-4">
+        <div className="flex items-center justify-between max-w-4xl mx-auto">
+          <div>
+            <h1 className="text-xl font-semibold">RAG Chat</h1>
+            <p className="text-xs text-muted-foreground">
+              Ask questions about your documents
+            </p>
+          </div>
+          <DocumentList />
         </div>
       </header>
 
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
-        {messages.length === 0 && (
-          <div className="text-center text-gray-500 mt-20">
-            <p className="text-lg">Welcome to RAG Chat!</p>
-            <p className="mt-2">Upload a document and start asking questions.</p>
-          </div>
-        )}
-
-        {messages.map((message, index) => (
-          <div
-            key={index}
-            className={`flex ${
-              message.role === 'user' ? 'justify-end' : 'justify-start'
-            }`}
-          >
-            <div
-              className={`max-w-3xl rounded-lg px-4 py-3 ${
-                message.role === 'user'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-white text-gray-900 border border-gray-200'
-              }`}
-            >
-              <p className="whitespace-pre-wrap">{message.content}</p>
-              {message.sources && message.sources.length > 0 && (
-                <div className="mt-2 pt-2 border-t border-gray-300">
-                  <p className="text-xs text-gray-600">
-                    Sources: {message.sources.join(', ')}
-                  </p>
-                </div>
-              )}
+      {/* Messages Area */}
+      <ScrollArea className="flex-1 px-4 py-6">
+        <div className="max-w-4xl mx-auto">
+          {messages.length === 0 && (
+            <div className="flex flex-col items-center justify-center h-full min-h-[400px] text-center">
+              <div>
+                <h2 className="text-2xl font-semibold mb-2">
+                  Welcome to RAG Chat
+                </h2>
+                <p className="text-muted-foreground mb-8 max-w-md">
+                  Upload documents and ask questions to get AI-powered answers
+                  based on your content.
+                </p>
+              </div>
             </div>
-          </div>
-        ))}
+          )}
 
-        {loading && (
-          <div className="flex justify-start">
-            <div className="bg-white border border-gray-200 rounded-lg px-4 py-3">
-              <p className="text-gray-500">Thinking...</p>
+          {messages.map((message, index) => (
+            <MessageBubble
+              key={index}
+              role={message.role}
+              content={message.content}
+            />
+          ))}
+
+          {loading && (
+            <div className="flex justify-start mb-4">
+              <div className="flex items-center gap-2 bg-card border border-border rounded-lg px-4 py-2">
+                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                <span className="text-sm text-muted-foreground">Thinking...</span>
+              </div>
             </div>
-          </div>
-        )}
-      </div>
+          )}
 
-      {/* Input */}
-      <div className="bg-white border-t border-gray-200 px-6 py-4">
-        <div className="flex gap-4 max-w-4xl mx-auto">
-          <input
-            type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && handleSend()}
-            placeholder="Type your message..."
-            className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            disabled={loading}
-          />
-          <button
-            onClick={handleSend}
-            disabled={loading || !input.trim()}
-            className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-          >
-            Send
-          </button>
+          <div ref={messagesEndRef} />
+        </div>
+      </ScrollArea>
+
+      <Separator />
+
+      {/* Input Area */}
+      <div className="border-t border-border bg-card p-4">
+        <div className="max-w-4xl mx-auto">
+          <ChatInput onSend={handleSend} disabled={loading} />
         </div>
       </div>
     </div>
