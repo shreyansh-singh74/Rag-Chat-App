@@ -33,14 +33,23 @@ export default function Home() {
       role: 'user',
       content: message,
     };
+    
+    // Send conversation history (all previous messages, not including current)
+    const conversationHistory = messages;
+    
+    // Add user message to UI immediately
     setMessages((prev) => [...prev, userMessage]);
     setLoading(true);
 
     try {
+      // Send current message and conversation history (previous messages only)
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message }),
+        body: JSON.stringify({ 
+          message,
+          conversationHistory // Send previous messages for context
+        }),
       });
 
       const data = await response.json();

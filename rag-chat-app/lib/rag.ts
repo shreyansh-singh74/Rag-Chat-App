@@ -56,11 +56,13 @@ export async function processDocument(
  * Query RAG system and generate response
  * @param query User query
  * @param topK Number of relevant chunks to retrieve (default: 5)
+ * @param conversationHistory Previous conversation messages for context
  * @returns Generated response with context
  */
 export async function queryRAG(
   query: string,
-  topK: number = 5
+  topK: number = 5,
+  conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }> = []
 ): Promise<{ response: string; sources: string[] }> {
   try {
     // Generate query embedding
@@ -115,12 +117,22 @@ export async function queryRAG(
 
     const model = genAI.getGenerativeModel({ model: modelName });
 
-    const prompt = `You are a helpful assistant. Answer the user's question based on the following context. If the context doesn't contain enough information, say so.
+    // Build conversation history context
+    let conversationContext = '';
+    if (conversationHistory.length > 0) {
+      // Limit to last 10 messages to avoid token limits
+      const recentHistory = conversationHistory.slice(-10);
+      conversationContext = '\n\nPrevious conversation:\n' + 
+        recentHistory.map(msg => `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.content}`).join('\n');
+    }
 
-Context:
+    const prompt = `You are a helpful assistant. Answer the user's question based on the following context from uploaded documents. If the context doesn't contain enough information, say so.${conversationContext ? ' Use the previous conversation context to provide a coherent and contextual response.' : ''}
+
+Document Context:
 ${context}
+${conversationContext}
 
-Question: ${query}
+Current Question: ${query}
 
 Answer:`;
 
